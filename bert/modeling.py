@@ -85,24 +85,6 @@ class BertConfig(object):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
 
-
-    def print_status(self):
-        """
-        Wonseok add this.
-        """
-
-        print( f"vocab size: {self.vocab_size}")
-        print( f"hidden_size: {self.hidden_size}")
-        print( f"num_hidden_layer: {self.num_hidden_layers}")
-        print( f"num_attention_heads: {self.num_attention_heads}")
-        print( f"hidden_act: {self.hidden_act}")
-        print( f"intermediate_size: {self.intermediate_size}")
-        print( f"hidden_dropout_prob: {self.hidden_dropout_prob}")
-        print( f"attention_probs_dropout_prob: {self.attention_probs_dropout_prob}")
-        print( f"max_position_embeddings: {self.max_position_embeddings}")
-        print( f"type_vocab_size: {self.type_vocab_size}")
-        print( f"initializer_range: {self.initializer_range}")
-
     @classmethod
     def from_dict(cls, json_object):
         """Constructs a `BertConfig` from a Python dictionary of parameters."""
@@ -138,15 +120,9 @@ class BERTLayerNorm(nn.Module):
         self.variance_epsilon = variance_epsilon
 
     def forward(self, x):
-        # x = input to the neuron.
-        # normalize each vector (each token).
-        # regularize x.
-        # If x follows Gaussian distribution, it becomes standard Normal distribution (i.e., mu=0, std=1).
-        u = x.mean(-1, keepdim=True) # keepdim = keeprank of tensor.
-        s = (x - u).pow(2).mean(-1, keepdim=True) # variance
-        x = (x - u) / torch.sqrt(s + self.variance_epsilon) # standard
-
-        # Gamma & Beta is trainable parameters.
+        u = x.mean(-1, keepdim=True)
+        s = (x - u).pow(2).mean(-1, keepdim=True)
+        x = (x - u) / torch.sqrt(s + self.variance_epsilon)
         return self.gamma * x + self.beta
 
 class BERTEmbeddings(nn.Module):
@@ -198,17 +174,8 @@ class BERTSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
-        """ From this,
-
-        """
-        # Maybe: x = [B, seq_len, all_head_size=hidden_size ]
-        # [B, seq_len] + [num_attention_heads, attention_head_size] ???
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size) # it is append (for torch.Size tensor, + acts as an concat. operation)
-
-        # [B, seq_len, all_head_size=hidden_size ] -> [B, seq_len, num_attention_heads, attention_head_size]
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
-
-        # [B, seq_len, num_attention_heads, attention_head_size] -> [B, num_attention_heads, seq_len, attention_head_size]
         return x.permute(0, 2, 1, 3)
 
     def forward(self, hidden_states, attention_mask):
@@ -221,12 +188,10 @@ class BERTSelfAttention(nn.Module):
         value_layer = self.transpose_for_scores(mixed_value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        # [B, num_attention_heads, seq_len, attention_head_size] * [B, num_attention_heads,  attention_head_size, seq_len]
-        # -> [B, num_attention_heads, seq_len, seq_len]
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-        attention_scores = attention_scores + attention_mask # sort of multiplication in soft-max step. It is ~ -10000
+        attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -235,14 +200,8 @@ class BERTSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # [B, num_attention_heads, seq_len, seq_len] * [B, num_attention_heads, seq_len, attention_head_size]
-        # -> [B, num_attention_heads, seq_len, attention_head_size]
         context_layer = torch.matmul(attention_probs, value_layer)
-
-        # -> [B, seq_len, num_attention_heads, attention_head_size]
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-
-        # [B, seq_len] + [all_head_size=hidden_size] -> [B, seq_len, all_head_size]
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
         return context_layer
@@ -378,8 +337,8 @@ class BertModel(nn.Module):
             token_type_ids = torch.zeros_like(input_ids)
 
         # We create a 3D attention mask from a 2D tensor mask.
-        # Sizes are [batch_size, 1, 1, to_seq_length]
-        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+        # Sizes are [batch_size, 1, 1, from_seq_length]
+        # So we can broadcast to [batch_size, num_heads, to_seq_length, from_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
@@ -513,156 +472,3 @@ class BertForQuestionAnswering(nn.Module):
             return total_loss
         else:
             return start_logits, end_logits
-
-
-class BertNoAnswer(nn.Module):
-    def __init__(self,hidden_size,context_length=317):
-        super(BertNoAnswer,self).__init__()
-        self.context_length = context_length
-        self.W_no = nn.Linear(hidden_size,1)
-        self.no_answer = nn.Sequential(nn.Linear(hidden_size*3,hidden_size),
-                                       nn.ReLU(),
-                                       nn.Linear(hidden_size,2))
-        
-    def forward(self,sequence_output,start_logit,end_logit,mask=None):
-        if mask is None:
-            nbatch,length,_ = sequence_output.size()
-            mask = torch.ones(nbatch,length)
-        mask = mask.float()
-        mask = mask.unsqueeze(-1)[:,1:self.context_length+1]
-        mask = (1.0 - mask) * -10000.0
-        sequence_output = sequence_output[:,1:self.context_length+1]
-        start_logit = start_logit[:,1:self.context_length+1] + mask
-        end_logit = end_logit[:,1:self.context_length+1] + mask
-        
-        # No-answer option
-        pa_1 = nn.functional.softmax(start_logit.transpose(1,2),-1) # B,1,T
-        v1 = torch.bmm(pa_1,sequence_output).squeeze(1) # B,H
-        pa_2 = nn.functional.softmax(end_logit.transpose(1,2),-1) # B,1,T
-        v2 = torch.bmm(pa_2,sequence_output).squeeze(1) # B,H
-        pa_3 = self.W_no(sequence_output) + mask
-        pa_3 = nn.functional.softmax(pa_3.transpose(1,2),-1) # B,1,T
-        v3 = torch.bmm(pa_3,sequence_output).squeeze(1) # B,H
-        
-        bias = self.no_answer(torch.cat([v1,v2,v3],-1)) # B,1
-        
-        return bias
-        
-class BertForSQuAD2(nn.Module):
-    def __init__(self, config, context_length=317):
-        super(BertForSQuAD2, self).__init__()
-        self.bert = BertModel(config)
-        # TODO check with Google if it's normal there is no dropout on the token classifier of SQuAD in the TF version
-        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, 2)
-        self.qa_outputs = nn.Linear(config.hidden_size, 2)
-        self.na_head = BertNoAnswer(config.hidden_size, context_length)
-
-        def init_weights(module):
-            if isinstance(module, (nn.Linear, nn.Embedding)):
-                # Slightly different from the TF version which uses truncated_normal for initialization
-                # cf https://github.com/pytorch/pytorch/pull/5617
-                module.weight.data.normal_(mean=0.0, std=config.initializer_range)
-            elif isinstance(module, BERTLayerNorm):
-                module.beta.data.normal_(mean=0.0, std=config.initializer_range)
-                module.gamma.data.normal_(mean=0.0, std=config.initializer_range)
-            if isinstance(module, nn.Linear):
-                module.bias.data.zero_()
-        self.apply(init_weights)
-        
-    def forward(self, input_ids, token_type_ids, attention_mask, start_positions=None, end_positions=None, labels=None):
-        all_encoder_layers, pooled_output = self.bert(input_ids, token_type_ids, attention_mask)
-        sequence_output = all_encoder_layers[-1]
-        span_logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = span_logits.split(1, dim=-1)
-        na_logits = self.na_head(sequence_output,start_logits,end_logits,attention_mask)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-        
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-        logits = (na_logits+logits)/2 # mean
-
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            unanswerable_loss = loss_fct(logits, labels)
-            span_loss = (start_loss + end_loss) / 2
-            total_loss = span_loss + unanswerable_loss
-            return total_loss
-        else:
-            probs = nn.functional.softmax(logits,-1)
-            _, probs = probs.split(1, dim=-1)
-            return start_logits, end_logits, probs
-
-
-class BertForWikiSQL(nn.Module):
-    def __init__(self, config, context_length=317):
-        super(BertForWikiSQL, self).__init__()
-        self.bert = BertModel(config)
-        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, 2)
-        self.qa_outputs = nn.Linear(config.hidden_size, 2)
-        self.na_head = BertNoAnswer(config.hidden_size, context_length)
-
-        def init_weights(module):
-            if isinstance(module, (nn.Linear, nn.Embedding)):
-                # Slightly different from the TF version which uses truncated_normal for initialization
-                # cf https://github.com/pytorch/pytorch/pull/5617
-                module.weight.data.normal_(mean=0.0, std=config.initializer_range)
-            elif isinstance(module, BERTLayerNorm):
-                module.beta.data.normal_(mean=0.0, std=config.initializer_range)
-                module.gamma.data.normal_(mean=0.0, std=config.initializer_range)
-            if isinstance(module, nn.Linear):
-                module.bias.data.zero_()
-
-        self.apply(init_weights)
-
-    def forward(self, input_ids, token_type_ids, attention_mask, start_positions=None, end_positions=None, labels=None):
-        all_encoder_layers, pooled_output = self.bert(input_ids, token_type_ids, attention_mask)
-        sequence_output = all_encoder_layers[-1]
-        span_logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = span_logits.split(1, dim=-1)
-        na_logits = self.na_head(sequence_output, start_logits, end_logits, attention_mask)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-        logits = (na_logits + logits) / 2  # mean
-
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            unanswerable_loss = loss_fct(logits, labels)
-            span_loss = (start_loss + end_loss) / 2
-            total_loss = span_loss + unanswerable_loss
-            return total_loss
-        else:
-            probs = nn.functional.softmax(logits, -1)
-            _, probs = probs.split(1, dim=-1)
-            return start_logits, end_logits, probs

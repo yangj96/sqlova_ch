@@ -78,15 +78,17 @@ def construct_hyper_param(parser):
                          'uL': 'uncased_L-24_H-1024_A-16',
                          'cS': 'cased_L-12_H-768_A-12',
                          'cL': 'cased_L-24_H-1024_A-16',
-                         'mcS': 'multi_cased_L-12_H-768_A-12'}
+                         'mcS': 'multi_cased_L-12_H-768_A-12'
+                         'ch': 'chinese_L-12_H-768_A-12'}
     args.bert_type = map_bert_type_abb[args.bert_type_abb]
     print(f"BERT-type: {args.bert_type}")
 
+    args.do_lower_case = False
     # Decide whether to use lower_case.
-    if args.bert_type_abb == 'cS' or args.bert_type_abb == 'cL' or args.bert_type_abb == 'mcS':
-        args.do_lower_case = False
-    else:
-        args.do_lower_case = True
+    # if args.bert_type_abb == 'ch' or args.bert_type_abb == 'cS' or args.bert_type_abb == 'cL' or args.bert_type_abb == 'mcS':
+    #     args.do_lower_case = False
+    # else:
+    #     args.do_lower_case = True
 
     # Seeds for random number generation
     seed(args.seed)
@@ -106,9 +108,12 @@ def construct_hyper_param(parser):
 def get_bert(BERT_PT_PATH, bert_type, do_lower_case, no_pretraining):
 
 
-    bert_config_file = os.path.join(BERT_PT_PATH, f'bert_config_{bert_type}.json')
-    vocab_file = os.path.join(BERT_PT_PATH, f'vocab_{bert_type}.txt')
-    init_checkpoint = os.path.join(BERT_PT_PATH, f'pytorch_model_{bert_type}.bin')
+    # bert_config_file = os.path.join(BERT_PT_PATH, f'bert_config_{bert_type}.json')
+    # vocab_file = os.path.join(BERT_PT_PATH, f'vocab_{bert_type}.txt')
+    # init_checkpoint = os.path.join(BERT_PT_PATH, f'pytorch_model_{bert_type}.bin')
+    bert_config_file = os.path.join(BERT_PT_PATH, f'bert_config.json')
+    vocab_file = os.path.join(BERT_PT_PATH, f'vocab.txt')
+    init_checkpoint = os.path.join(BERT_PT_PATH, f'pytorch_model.bin')
 
 
 
@@ -556,9 +561,9 @@ if __name__ == '__main__':
     args = construct_hyper_param(parser)
 
     ## 2. Paths
-    path_h = '/home/wonseok'
+    path_h = './'
     path_wikisql = os.path.join(path_h, 'data', 'wikisql_tok')
-    BERT_PT_PATH = path_wikisql
+    BERT_PT_PATH = os.path.join(path_h, 'data', {bert_type})
 
     path_save_for_evaluation = './'
 

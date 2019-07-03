@@ -4,3 +4,4 @@ sqlnet/__pycache__
 bert/__pycache__
 .idea
 *.swp
+data/
