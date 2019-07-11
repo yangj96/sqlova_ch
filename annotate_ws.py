@@ -153,8 +153,8 @@ def is_valid_example(e):
 
 if __name__ == '__main__':
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--din', default='/Users/wonseok/data/WikiSQL-1.1/data', help='data directory')
-    parser.add_argument('--dout', default='/Users/wonseok/data/wikisql_tok', help='output directory')
+    parser.add_argument('--din', default='./data', help='data directory')
+    parser.add_argument('--dout', default='./data/wikisql_tok', help='output directory')
     parser.add_argument('--split', default='train,dev,test', help='comma=separated list of splits to process')
     args = parser.parse_args()
 

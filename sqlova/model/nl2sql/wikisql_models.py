@@ -175,7 +175,7 @@ class Seq2SQL_v1(nn.Module):
         # Found "executable" most likely 4(=max_num_of_conditions) where-clauses.
         # wc
         s_wc = self.wcp(wemb_n, l_n, wemb_hpu, l_hpu, l_hs, show_p_wc=show_p_wc, penalty=True)
-        prob_wc = F.sigmoid(s_wc).detach().to('cpu').numpy()
+        prob_wc = torch.sigmoid(s_wc).detach().to('cpu').numpy()
         # pr_wc_sorted_by_prob = pred_wc_sorted_by_prob(s_wc)
 
         # get max_wn # of most probable columns & their prob.
@@ -943,7 +943,7 @@ def Loss_wc(s_wc, g_wc):
         for g_wc11 in g_wc1:
             im[b, g_wc11] = 1.0
     # Construct prob.
-    p = F.sigmoid(s_wc)
+    p = torch.sigmoid(s_wc)
     loss = F.binary_cross_entropy(p, im)
 
     return loss

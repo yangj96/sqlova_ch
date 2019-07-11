@@ -5,3 +5,4 @@ bert/__pycache__
 .idea
 *.swp
 data/
+data_ch/

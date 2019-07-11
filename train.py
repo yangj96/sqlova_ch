@@ -20,6 +20,7 @@ from sqlova.utils.utils_wikisql import *
 from sqlova.model.nl2sql.wikisql_models import *
 from sqlnet.dbengine import DBEngine
 
+os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def construct_hyper_param(parser):
@@ -78,17 +79,17 @@ def construct_hyper_param(parser):
                          'uL': 'uncased_L-24_H-1024_A-16',
                          'cS': 'cased_L-12_H-768_A-12',
                          'cL': 'cased_L-24_H-1024_A-16',
-                         'mcS': 'multi_cased_L-12_H-768_A-12'
+                         'mcS': 'multi_cased_L-12_H-768_A-12',
                          'ch': 'chinese_L-12_H-768_A-12'}
     args.bert_type = map_bert_type_abb[args.bert_type_abb]
     print(f"BERT-type: {args.bert_type}")
 
     args.do_lower_case = False
     # Decide whether to use lower_case.
-    # if args.bert_type_abb == 'ch' or args.bert_type_abb == 'cS' or args.bert_type_abb == 'cL' or args.bert_type_abb == 'mcS':
-    #     args.do_lower_case = False
-    # else:
-    #     args.do_lower_case = True
+    if args.bert_type_abb == 'ch' or args.bert_type_abb == 'cS' or args.bert_type_abb == 'cL' or args.bert_type_abb == 'mcS':
+        args.do_lower_case = False
+    else:
+        args.do_lower_case = True
 
     # Seeds for random number generation
     seed(args.seed)
@@ -120,7 +121,7 @@ def get_bert(BERT_PT_PATH, bert_type, do_lower_case, no_pretraining):
     bert_config = BertConfig.from_json_file(bert_config_file)
     tokenizer = tokenization.FullTokenizer(
         vocab_file=vocab_file, do_lower_case=do_lower_case)
-    bert_config.print_status()
+    # bert_config.print_status()
 
     model_bert = BertModel(bert_config)
     if no_pretraining:
@@ -159,7 +160,7 @@ def get_models(args, BERT_PT_PATH, trained=False, path_model_bert=None, path_mod
     # Get BERT
     model_bert, tokenizer, bert_config = get_bert(BERT_PT_PATH, args.bert_type, args.do_lower_case,
                                                   args.no_pretraining)
-    args.iS = bert_config.hidden_size * args.num_target_layers  # Seq-to-SQL input vector dimenstion
+    args.iS = bert_config.hidden_size * args.num_target_layers  # Seq-to-SQL input vector dimension
 
     # Get Seq-to-SQL
 
@@ -563,7 +564,7 @@ if __name__ == '__main__':
     ## 2. Paths
     path_h = './'
     path_wikisql = os.path.join(path_h, 'data', 'wikisql_tok')
-    BERT_PT_PATH = os.path.join(path_h, 'data', {bert_type})
+    BERT_PT_PATH = './data/uncased_L-12_H-768_A-12'
 
     path_save_for_evaluation = './'
 
