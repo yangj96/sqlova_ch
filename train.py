@@ -20,11 +20,10 @@ from sqlova.utils.utils_wikisql import *
 from sqlova.model.nl2sql.wikisql_models import *
 from sqlnet.dbengine import DBEngine
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '3'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def construct_hyper_param(parser):
-    parser.add_argument('--tepoch', default=200, type=int)
+    parser.add_argument('--tepoch', default=64, type=int)
     parser.add_argument("--bS", default=32, type=int,
                         help="Batch size")
     parser.add_argument("--accumulate_gradients", default=1, type=int,
@@ -107,16 +106,12 @@ def construct_hyper_param(parser):
 
 
 def get_bert(BERT_PT_PATH, bert_type, do_lower_case, no_pretraining):
-
-
     # bert_config_file = os.path.join(BERT_PT_PATH, f'bert_config_{bert_type}.json')
     # vocab_file = os.path.join(BERT_PT_PATH, f'vocab_{bert_type}.txt')
     # init_checkpoint = os.path.join(BERT_PT_PATH, f'pytorch_model_{bert_type}.bin')
     bert_config_file = os.path.join(BERT_PT_PATH, f'bert_config.json')
     vocab_file = os.path.join(BERT_PT_PATH, f'vocab.txt')
     init_checkpoint = os.path.join(BERT_PT_PATH, f'pytorch_model.bin')
-
-
 
     bert_config = BertConfig.from_json_file(bert_config_file)
     tokenizer = tokenization.FullTokenizer(
@@ -149,8 +144,9 @@ def get_opt(model, model_bert, fine_tune):
 
 def get_models(args, BERT_PT_PATH, trained=False, path_model_bert=None, path_model=None):
     # some constants
-    agg_ops = ['', 'MAX', 'MIN', 'COUNT', 'SUM', 'AVG']
-    cond_ops = ['=', '>', '<', 'OP']  # do not know why 'OP' required. Hence,
+    agg_ops = ['', 'AVG', 'MAX', 'MIN', 'COUNT', 'SUM']
+    cond_ops = ['>', '<', '==', '!=']
+    cond_conn_ops = ['', 'and', 'or']
 
     print(f"Batch_size = {args.bS * args.accumulate_gradients}")
     print(f"BERT parameters:")
@@ -163,15 +159,15 @@ def get_models(args, BERT_PT_PATH, trained=False, path_model_bert=None, path_mod
     args.iS = bert_config.hidden_size * args.num_target_layers  # Seq-to-SQL input vector dimension
 
     # Get Seq-to-SQL
-
     n_cond_ops = len(cond_ops)
     n_agg_ops = len(agg_ops)
+    n_cond_conn_ops = len(cond_conn_ops)
     print(f"Seq-to-SQL: the number of final BERT layers to be used: {args.num_target_layers}")
     print(f"Seq-to-SQL: the size of hidden dimension = {args.hS}")
     print(f"Seq-to-SQL: LSTM encoding layer size = {args.lS}")
     print(f"Seq-to-SQL: dropout rate = {args.dr}")
     print(f"Seq-to-SQL: learning rate = {args.lr}")
-    model = Seq2SQL_v1(args.iS, args.hS, args.lS, args.dr, n_cond_ops, n_agg_ops)
+    model = Seq2SQL_v1(args.iS, args.hS, args.lS, args.dr, n_cond_ops, n_agg_ops, n_cond_conn_ops)
     model = model.to(device)
 
     if trained:

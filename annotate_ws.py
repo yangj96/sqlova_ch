@@ -45,6 +45,7 @@ def annotate_example(example, table):
         c[-1] = annotate(str(c[-1]))
 
     q1 = 'SYMSELECT SYMAGG {} SYMCOL {}'.format(Query.agg_ops[sql['agg']], table['header'][sql['sel']])
+    # conditions -> WHERE
     q2 = ['SYMCOL {} SYMOP {} SYMCOND {}'.format(table['header'][col], Query.cond_ops[op], detokenize(cond)) for col, op, cond in sql['conds']]
     if q2:
         q2 = 'SYMWHERE ' + ' SYMAND '.join(q2) + ' SYMEND'
@@ -153,9 +154,9 @@ def is_valid_example(e):
 
 if __name__ == '__main__':
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--din', default='./data', help='data directory')
+    parser.add_argument('--din', default='./data/wikisql_tok', help='data directory')
     parser.add_argument('--dout', default='./data/wikisql_tok', help='output directory')
-    parser.add_argument('--split', default='train,dev,test', help='comma=separated list of splits to process')
+    parser.add_argument('--split', default='train,val,test', help='comma=separated list of splits to process')
     args = parser.parse_args()
 
     answer_toy = not True
@@ -166,9 +167,9 @@ if __name__ == '__main__':
 
     # for split in ['train', 'dev', 'test']:
     for split in args.split.split(','):
-        fsplit = os.path.join(args.din, split) + '.jsonl'
-        ftable = os.path.join(args.din, split) + '.tables.jsonl'
-        fout = os.path.join(args.dout, split) + '_tok.jsonl'
+        fsplit = os.path.join(args.din, split) + '.json'
+        ftable = os.path.join(args.din, split) + '.tables.json'
+        fout = os.path.join(args.dout, split) + '_tok.json'
 
         print('annotating {}'.format(fsplit))
         with open(fsplit) as fs, open(ftable) as ft, open(fout, 'wt') as fo:

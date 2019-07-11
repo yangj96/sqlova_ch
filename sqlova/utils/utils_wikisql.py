@@ -110,6 +110,13 @@ def get_loader_wikisql(data_train, data_dev, bS, shuffle_train=True, shuffle_dev
 
 
 def get_fields_1(t1, tables, no_hs_t=False, no_sql_t=False):
+    # nlu  : natural language utterance
+    # nlu_t: tokenized nlu
+    # sql_i: canonical form of SQL query
+    # sql_q: full SQL query text. Not used.
+    # sql_t: tokenized SQL query
+    # tb   : table
+    # hs_t : tokenized headers. Not used.
     nlu1 = t1['question']
     nlu_t1 = t1['question_tok']
     tid1 = t1['table_id']

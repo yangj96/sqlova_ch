@@ -18,7 +18,7 @@ from sqlova.utils.utils import topk_multi_dim
 from sqlova.utils.utils_wikisql import *
 
 class Seq2SQL_v1(nn.Module):
-    def __init__(self, iS, hS, lS, dr, n_cond_ops, n_agg_ops, old=False):
+    def __init__(self, iS, hS, lS, dr, n_cond_ops, n_agg_ops, n_cond_conn_ops, old=False):
         super(Seq2SQL_v1, self).__init__()
         self.iS = iS
         self.hS = hS
@@ -28,6 +28,7 @@ class Seq2SQL_v1(nn.Module):
         self.max_wn = 4
         self.n_cond_ops = n_cond_ops
         self.n_agg_ops = n_agg_ops
+        self.n_cond_conn_ops = n_cond_conn_ops
 
         self.scp = SCP(iS, hS, lS, dr)
         self.sap = SAP(iS, hS, lS, dr, n_agg_ops, old=old)
