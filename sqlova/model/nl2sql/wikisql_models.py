@@ -30,11 +30,17 @@ class Seq2SQL_v1(nn.Module):
         self.n_agg_ops = n_agg_ops
         self.n_cond_conn_ops = n_cond_conn_ops
 
+        # select column
         self.scp = SCP(iS, hS, lS, dr)
+        # select aggregation
         self.sap = SAP(iS, hS, lS, dr, n_agg_ops, old=old)
+        # where number
         self.wnp = WNP(iS, hS, lS, dr)
+        # where column
         self.wcp = WCP(iS, hS, lS, dr)
+        # where operater
         self.wop = WOP(iS, hS, lS, dr, n_cond_ops)
+        # where value
         self.wvp = WVP_se(iS, hS, lS, dr, n_cond_ops, old=old) # start-end-search-discriminative model
 
 

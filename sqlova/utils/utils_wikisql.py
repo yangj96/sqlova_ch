@@ -48,7 +48,7 @@ def load_wikisql_data(path_wikisql, mode='train', toy_model=False, toy_size=10, 
         mode = f"aug.{mode}"
         print('Augmented data is loaded!')
 
-    path_sql = os.path.join(path_wikisql, mode+'_tok.jsonl')
+    path_sql = os.path.join(path_wikisql, mode+'.jsonl')
     if no_hs_tok:
         path_table = os.path.join(path_wikisql, mode + '.tables.jsonl')
     else:
@@ -118,10 +118,10 @@ def get_fields_1(t1, tables, no_hs_t=False, no_sql_t=False):
     # tb   : table
     # hs_t : tokenized headers. Not used.
     nlu1 = t1['question']
-    nlu_t1 = t1['question_tok']
+    # nlu_t1 = t1['question_tok']
     tid1 = t1['table_id']
     sql_i1 = t1['sql']
-    sql_q1 = t1['query']
+    # sql_q1 = t1['query']
     if no_sql_t:
         sql_t1 = None
     else:
@@ -134,16 +134,16 @@ def get_fields_1(t1, tables, no_hs_t=False, no_sql_t=False):
         hs_t1 = []
     hs1 = tb1['header']
 
-    return nlu1, nlu_t1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1
+    return nlu1, tid1, sql_i1, sql_t1, tb1, hs_t1, hs1
 
 def get_fields(t1s, tables, no_hs_t=False, no_sql_t=False):
 
     nlu, nlu_t, tid, sql_i, sql_q, sql_t, tb, hs_t, hs = [], [], [], [], [], [], [], [], []
     for t1 in t1s:
         if no_hs_t:
-            nlu1, nlu_t1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1 = get_fields_1(t1, tables, no_hs_t, no_sql_t)
+            nlu1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1 = get_fields_1(t1, tables, no_hs_t, no_sql_t)
         else:
-            nlu1, nlu_t1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1 = get_fields_1(t1, tables, no_hs_t, no_sql_t)
+            nlu1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1 = get_fields_1(t1, tables, no_hs_t, no_sql_t)
 
         nlu.append(nlu1)
         nlu_t.append(nlu_t1)
