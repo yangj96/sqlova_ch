@@ -28,7 +28,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def load_wikisql(path_wikisql, toy_model, toy_size, bert=False, no_w2i=False, no_hs_tok=False, aug=False):
     # Get data
     train_data, train_table = load_wikisql_data(path_wikisql, mode='train', toy_model=toy_model, toy_size=toy_size, no_hs_tok=no_hs_tok, aug=aug)
-    dev_data, dev_table = load_wikisql_data(path_wikisql, mode='dev', toy_model=toy_model, toy_size=toy_size, no_hs_tok=no_hs_tok)
+    dev_data, dev_table = load_wikisql_data(path_wikisql, mode='val', toy_model=toy_model, toy_size=toy_size, no_hs_tok=no_hs_tok)
 
 
     # Get word vector
@@ -48,11 +48,11 @@ def load_wikisql_data(path_wikisql, mode='train', toy_model=False, toy_size=10, 
         mode = f"aug.{mode}"
         print('Augmented data is loaded!')
 
-    path_sql = os.path.join(path_wikisql, mode+'.jsonl')
+    path_sql = os.path.join(path_wikisql, mode+'.json')
     if no_hs_tok:
-        path_table = os.path.join(path_wikisql, mode + '.tables.jsonl')
+        path_table = os.path.join(path_wikisql, mode + '.tables.json')
     else:
-        path_table = os.path.join(path_wikisql, mode+'_tok.tables.jsonl')
+        path_table = os.path.join(path_wikisql, mode+'_tok.tables.json')
 
     data = []
     table = {}
@@ -74,7 +74,7 @@ def load_wikisql_data(path_wikisql, mode='train', toy_model=False, toy_size=10, 
 
     return data, table
 
-
+# not used
 def load_w2i_wemb(path_wikisql, bert=False):
     """ Load pre-made subset of TAPI.
     """
@@ -111,17 +111,17 @@ def get_loader_wikisql(data_train, data_dev, bS, shuffle_train=True, shuffle_dev
 
 def get_fields_1(t1, tables, no_hs_t=False, no_sql_t=False):
     # nlu  : natural language utterance
-    # nlu_t: tokenized nlu
+    # nlu_t: tokenized nlu. Removed temporarily.
     # sql_i: canonical form of SQL query
     # sql_q: full SQL query text. Not used.
     # sql_t: tokenized SQL query
     # tb   : table
     # hs_t : tokenized headers. Not used.
     nlu1 = t1['question']
-    # nlu_t1 = t1['question_tok']
+    nlu_t1 = nlu1
     tid1 = t1['table_id']
     sql_i1 = t1['sql']
-    # sql_q1 = t1['query']
+    sql_q1 = []
     if no_sql_t:
         sql_t1 = None
     else:
@@ -134,16 +134,13 @@ def get_fields_1(t1, tables, no_hs_t=False, no_sql_t=False):
         hs_t1 = []
     hs1 = tb1['header']
 
-    return nlu1, tid1, sql_i1, sql_t1, tb1, hs_t1, hs1
+    return nlu1, nlu_t1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1
+
 
 def get_fields(t1s, tables, no_hs_t=False, no_sql_t=False):
-
     nlu, nlu_t, tid, sql_i, sql_q, sql_t, tb, hs_t, hs = [], [], [], [], [], [], [], [], []
     for t1 in t1s:
-        if no_hs_t:
-            nlu1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1 = get_fields_1(t1, tables, no_hs_t, no_sql_t)
-        else:
-            nlu1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1 = get_fields_1(t1, tables, no_hs_t, no_sql_t)
+        nlu1, nlu_t1, tid1, sql_i1, sql_q1, sql_t1, tb1, hs_t1, hs1 = get_fields_1(t1, tables, no_hs_t, no_sql_t)
 
         nlu.append(nlu1)
         nlu_t.append(nlu_t1)
@@ -164,7 +161,6 @@ def get_fields(t1s, tables, no_hs_t=False, no_sql_t=False):
 def word_to_idx1(words1, w2i, no_BE):
     w2i_l1 = []
     l1 = len(words1)  # +2 because of <BEG>, <END>
-
 
     for w in words1:
         idx = w2i.get(w, 0)
@@ -349,17 +345,15 @@ def get_g(sql_i):
     g_wo = []
     g_wv = []
     for b, psql_i1 in enumerate(sql_i):
-        g_sc.append( psql_i1["sel"] )
-        g_sa.append( psql_i1["agg"])
+        g_sc.append( psql_i1["sel"] ) # dims: 2
+        g_sa.append( psql_i1["agg"])  # dims: 2
 
         conds = psql_i1['conds']
-        if not psql_i1["agg"] < 0:
-            g_wn.append( len( conds ) )
-            g_wc.append( get_wc1(conds) )
-            g_wo.append( get_wo1(conds) )
-            g_wv.append( get_wv1(conds) )
-        else:
-            raise EnvironmentError
+        g_wn.append( len( conds ) )
+        g_wc.append( get_wc1(conds) )
+        g_wo.append( get_wo1(conds) )
+        g_wv.append( get_wv1(conds) )
+
     return g_sc, g_sa, g_wn, g_wc, g_wo, g_wv
 
 def get_g_wvi_corenlp(t):
@@ -816,12 +810,11 @@ def get_wemb_h(i_hds, l_hpu, l_hs, hS, num_hidden_layers, all_encoder_layer, num
 
 
 
-def get_wemb_bert(bert_config, model_bert, tokenizer, nlu_t, hds, max_seq_length, num_out_layers_n=1, num_out_layers_h=1):
-
+def get_wemb_bert(bert_config, model_bert, tokenizer, nlu, hds, max_seq_length, num_out_layers_n=1, num_out_layers_h=1):
     # get contextual output of all tokens from bert
     all_encoder_layer, pooled_output, tokens, i_nlu, i_hds,\
     l_n, l_hpu, l_hs, \
-    nlu_tt, t_to_tt_idx, tt_to_t_idx = get_bert_output(model_bert, tokenizer, nlu_t, hds, max_seq_length)
+    nlu_tt, t_to_tt_idx, tt_to_t_idx = get_bert_output(model_bert, tokenizer, nlu, hds, max_seq_length)
     # all_encoder_layer: BERT outputs from all layers.
     # pooled_output: output of [CLS] vec.
     # tokens: BERT intput tokens

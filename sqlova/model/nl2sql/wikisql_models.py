@@ -19,12 +19,20 @@ from sqlova.utils.utils_wikisql import *
 
 class Seq2SQL_v1(nn.Module):
     def __init__(self, iS, hS, lS, dr, n_cond_ops, n_agg_ops, n_cond_conn_ops, old=False):
+        """
+            iS: input vector dimension = bert_hidden_size * num_bert_layers
+            hS: hidden vector dimension
+            lS: number of LSTM layers
+            dr: dropout rate
+            lr: learning rate
+        """
         super(Seq2SQL_v1, self).__init__()
         self.iS = iS
         self.hS = hS
         self.ls = lS
         self.dr = dr
 
+        # max where clause number
         self.max_wn = 4
         self.n_cond_ops = n_cond_ops
         self.n_agg_ops = n_agg_ops
@@ -50,6 +58,11 @@ class Seq2SQL_v1(nn.Module):
                 show_p_wn=False, show_p_wc=False, show_p_wo=False, show_p_wv=False):
 
         # sc
+        # wemb_n: natural language embedding
+        # wemb_h: header embedding
+        # l_n: token lengths of each question
+        # l_hpu: header token lengths
+        # l_hs: the number of columns (headers) of the tables.
         s_sc = self.scp(wemb_n, l_n, wemb_hpu, l_hpu, l_hs, show_p_sc=show_p_sc)
 
         if g_sc:
@@ -288,6 +301,7 @@ class Seq2SQL_v1(nn.Module):
 
 class SCP(nn.Module):
     def __init__(self, iS=300, hS=100, lS=2, dr=0.3):
+
         super(SCP, self).__init__()
         self.iS = iS
         self.hS = hS
@@ -312,6 +326,12 @@ class SCP(nn.Module):
         self.softmax_dim2 = nn.Softmax(dim=2)
 
     def forward(self, wemb_n, l_n, wemb_hpu, l_hpu, l_hs, show_p_sc=False):
+        # wemb_n: natural language embedding
+        # wemb_h: header embedding
+        # l_n: token lengths of each question
+        # l_hpu: header token lengths
+        # l_hs: the number of columns (headers) of the tables.
+
         # Encode
         wenc_n = encode(self.enc_n, wemb_n, l_n,
                         return_hidden=False,
@@ -363,6 +383,7 @@ class SCP(nn.Module):
         s_sc = self.sc_out(vec).squeeze(2) # [bS, mL_hs, 1] -> [bS, mL_hs]
 
         # Penalty
+        #
         mL_hs = max(l_hs)
         for b, l_hs1 in enumerate(l_hs):
             if l_hs1 < mL_hs:
@@ -396,12 +417,28 @@ class SAP(nn.Module):
         self.softmax_dim1 = nn.Softmax(dim=1)
         self.softmax_dim2 = nn.Softmax(dim=2)
 
+        self.sa_out_K = nn.Linear(hS, hS)
+        self.col_out_col = nn.Linear(hS, hS)
+
         if old:
             # for backwoard compatibility
             self.W_c = nn.Linear(hS, hS)
             self.W_hs = nn.Linear(hS, hS)
 
     def forward(self, wemb_n, l_n, wemb_hpu, l_hpu, l_hs, pr_sc, show_p_sa=False):
+        # wemb_n: natural language embedding
+        # wemb_h: header embedding
+        # l_n: token lengths of each question
+        # l_hpu: header token lengths
+        # l_hs: the number of columns (headers) of the tables.
+
+        # x_emb_var: embedding of each question
+        # x_len: length of each question
+        # col_inp_var: embedding of each header
+        # col_name_len: length of each header
+        # col_len: number of headers in each table, array type
+        # col_num: number of headers in each table, list type
+
         # Encode
         wenc_n = encode(self.enc_n, wemb_n, l_n,
                         return_hidden=False,
@@ -410,20 +447,30 @@ class SAP(nn.Module):
 
         wenc_hs = encode_hpu(self.enc_h, wemb_hpu, l_hpu, l_hs)  # [b, hs, dim]
 
+        embS = len(wemb_n)
         bS = len(l_hs)
         mL_n = max(l_n)
 
-        wenc_hs_ob = wenc_hs[list(range(bS)), pr_sc]  # list, so one sample for each batch.
+        # wenc_hs_ob = wenc_hs[list(range(bS)), pr_sc]  # list, so one sample for each batch.
 
-        # [bS, mL_n, 100] * [bS, 100, 1] -> [bS, mL_n]
-        att = torch.bmm(self.W_att(wenc_n), wenc_hs_ob.unsqueeze(2)).squeeze(2)
+        # tmp = self.W_att(wenc_n).unsqueeze(1)
+        # print(tmp.shape)
+        col_emb = []
+        for b in range(embS):
+            cur_col_emb = torch.stack([wenc_hs[b, x] for x in pr_sc[b]] + [wenc_hs[b, 0]] * (4 - len(pr_sc[b])))
+            col_emb.append(cur_col_emb)
+        col_emb = torch.stack(col_emb)
+
+        # [bS, 1, mL_n, 100] * [bS, bS, 100, 1] -> [bS, bS, mL_n]
+        att = torch.matmul(self.W_att(wenc_n).unsqueeze(1), col_emb.unsqueeze(3)).squeeze() # .transpose(1,2))
+        # att = torch.bmm(tmp, wenc_hs_ob.unsqueeze(2)).squeeze(2)
 
         #   Penalty on blank parts
         for b, l_n1 in enumerate(l_n):
             if l_n1 < mL_n:
                 att[b, l_n1:] = -10000000000
-        # [bS, mL_n]
-        p = self.softmax_dim1(att)
+        # [bS, bS, mL_n]
+        p = self.softmax_dim1(att.view(embS*4, -1)).view(embS, 4, -1)
 
         if show_p_sa:
             if p.shape[0] != 1:
@@ -437,12 +484,11 @@ class SAP(nn.Module):
             fig.tight_layout()
             fig.canvas.draw()
             show()
-            
         #    [bS, mL_n, 100] * ( [bS, mL_n, 1] -> [bS, mL_n, 100])
         #       -> [bS, mL_n, 100] -> [bS, 100]
-        c_n = torch.mul(wenc_n, p.unsqueeze(2).expand_as(wenc_n)).sum(dim=1)
-        s_sa = self.sa_out(c_n)
-
+        # c_n = torch.mul(wenc_n, p.unsqueeze(2).expand_as(wenc_n)).sum(dim=1)
+        c_n = (wenc_n.unsqueeze(1) * p.unsqueeze(3)).sum(dim=2)
+        s_sa = self.sa_out(self.sa_out_K(c_n) + self.col_out_col(col_emb)).squeeze()
         return s_sa
 
 

@@ -157,6 +157,7 @@ def get_models(args, BERT_PT_PATH, trained=False, path_model_bert=None, path_mod
     model_bert, tokenizer, bert_config = get_bert(BERT_PT_PATH, args.bert_type, args.do_lower_case,
                                                   args.no_pretraining)
     args.iS = bert_config.hidden_size * args.num_target_layers  # Seq-to-SQL input vector dimension
+    print(f"Seq-to-SQL input vector dimension: {args.iS}")
 
     # Get Seq-to-SQL
     n_cond_ops = len(cond_ops)
@@ -205,13 +206,15 @@ def train(train_loader, train_table, model, model_bert, opt, bert_config, tokeni
 
     ave_loss = 0
     cnt = 0 # count the # of examples
-    cnt_sc = 0 # count the # of correct predictions of select column
-    cnt_sa = 0 # of selectd aggregation
+    cnt_sn = 0 # count of correct predictions of number of select columns
+    cnt_sc = 0 # of select columns
+    cnt_sa = 0 # of select aggregation
     cnt_wn = 0 # of where number
     cnt_wc = 0 # of where column
     cnt_wo = 0 # of where operator
     cnt_wv = 0 # of where-value
     cnt_wvi = 0 # of where-value index (on question tokens)
+    cnt_wr = 0 # of where relation
     cnt_lx = 0  # of logical form acc
     cnt_x = 0   # of execution acc
 
@@ -223,7 +226,8 @@ def train(train_loader, train_table, model, model_bert, opt, bert_config, tokeni
 
         if cnt < st_pos:
             continue
-        # Get fields
+        # Get fields, lack of table id
+        # TODO generate nlu_t and modify here
         nlu, nlu_t, sql_i, sql_q, sql_t, tb, hs_t, hds = get_fields(t, train_table, no_hs_t=True, no_sql_t=True)
         # nlu  : natural language utterance
         # nlu_t: tokenized nlu
@@ -233,9 +237,13 @@ def train(train_loader, train_table, model, model_bert, opt, bert_config, tokeni
         # tb   : table
         # hs_t : tokenized headers. Not used.
 
+        # get ground truth
+        # TODO add select num and where connection
         g_sc, g_sa, g_wn, g_wc, g_wo, g_wv = get_g(sql_i)
         # get ground truth where-value index under CoreNLP tokenization scheme. It's done already on trainset.
-        g_wvi_corenlp = get_g_wvi_corenlp(t)
+        # TODO calc start and end index
+        # g_wvi_corenlp = get_g_wvi_corenlp(t)
+        g_wvi_corenlp = []
 
         wemb_n, wemb_h, l_n, l_hpu, l_hs, \
         nlu_tt, t_to_tt_idx, tt_to_t_idx \
@@ -246,7 +254,7 @@ def train(train_loader, train_table, model, model_bert, opt, bert_config, tokeni
         # wemb_h: header embedding
         # l_n: token lengths of each question
         # l_hpu: header token lengths
-        # l_hs: the number of columns (headers) of the tables.
+        # l_hs: The length of columns for each batch
         try:
             #
             g_wvi = get_g_wvi_bert_from_g_wvi_corenlp(t_to_tt_idx, g_wvi_corenlp)
@@ -560,7 +568,7 @@ if __name__ == '__main__':
     ## 2. Paths
     path_h = './'
     path_wikisql = os.path.join(path_h, 'data', 'wikisql_tok')
-    BERT_PT_PATH = './data/uncased_L-12_H-768_A-12'
+    BERT_PT_PATH = os.path.join(path_h, 'data', args.bert_type)
 
     path_save_for_evaluation = './'
 
