@@ -356,11 +356,50 @@ def get_g(sql_i):
 
     return g_sc, g_sa, g_wn, g_wc, g_wo, g_wv
 
+# def get_g_wvi_corenlp(t):
+#     g_wvi_corenlp = []
+#     for t1 in t:
+#         g_wvi_corenlp.append( t1['wvi_corenlp'] )
+#     return g_wvi_corenlp
+
+
 def get_g_wvi_corenlp(t):
     g_wvi_corenlp = []
     for t1 in t:
-        g_wvi_corenlp.append( t1['wvi_corenlp'] )
+        nlu1 = t1['question']
+        conds1 = t1['sql']['conds']
+        wv1 = []
+        for conds11 in conds1:
+            wv_ann11 = str(conds11[2])
+            wv1.append(wv_ann11)
+
+        wvi = check_wvi_in_nlu_tok(wv1, nlu1)
+        g_wvi_corenlp.append(wvi)
     return g_wvi_corenlp
+
+
+def check_wvi_in_nlu_tok(wv, nlu):
+    """
+    Generate SQuAD style start and end index of wv in nlu of character tokenization.
+    return:
+    st_idx of where-value string token in nlu under character tokenization.
+    """
+    g_wvi1_corenlp = []
+    for wv1 in enumerate(wv):
+        # wvi: tuple(id, where_value)
+        results = find_exact_where_value(wv1[1], nlu)
+        st_idx, ed_idx = results
+        g_wvi1_corenlp.append([st_idx, ed_idx])
+    return g_wvi1_corenlp
+
+
+def find_exact_where_value(sl, l):
+    sll = len(sl)
+    for ind in (i for i, e in enumerate(l) if e == sl[0]):
+        if l[ind:ind + sll] == sl:
+            return (ind, ind + sll - 1)
+    # TODO update for where_str not in nlu
+    return (-1, -1)
 
 
 def update_w2i_wemb(word, wv, idx_w2i, n_total, w2i, wemb):
@@ -877,18 +916,28 @@ def gen_pnt_n(g_wvi, mL_w, mL_nt):
     return pnt_n, l_g_wvi
 
 
-def pred_sc(s_sc):
+def pred_sc(sn, s_sc):
     """
     return: [ pr_wc1_i, pr_wc2_i, ...]
     """
-    # get g_num
     pr_sc = []
-    for s_sc1 in s_sc:
-        pr_sc.append(s_sc1.argmax().item())
+    for b, wn1 in enumerate(sn):
+        s_sc1 = s_sc[b]
 
+        pr_sc1 = argsort(-s_sc1.data.cpu().numpy())[:sn1]
+        pr_sc1.sort()
+
+        pr_sc.append(list(pr_sc1))
     return pr_sc
+    # get g_num
+    # pr_sc = []
+    # for s_sc1 in s_sc:
+    #     pr_sc.append(s_sc1.argmax().item())
+    #
+    # return pr_sc
 
 def pred_sc_beam(s_sc, beam_size):
+    # TODO update beam sc
     """
     return: [ pr_wc1_i, pr_wc2_i, ...]
     """
@@ -906,12 +955,21 @@ def pred_sa(s_sa):
     """
     return: [ pr_wc1_i, pr_wc2_i, ...]
     """
-    # get g_num
-    pr_sa = []
-    for s_sa1 in s_sa:
-        pr_sa.append(s_sa1.argmax().item())
+    pr_sc = []
+    for b, wn1 in enumerate(sn):
+        s_sc1 = s_sc[b]
 
-    return pr_sa
+        pr_sc1 = argsort(-s_sc1.data.cpu().numpy())[:sn1]
+        pr_sc1.sort()
+
+        pr_sc.append(list(pr_sc1))
+    return pr_sc
+    # get g_num
+    # pr_sa = []
+    # for s_sa1 in s_sa:
+    #     pr_sa.append(s_sa1.argmax().item())
+    #
+    # return pr_sa
 
 
 def pred_wn(s_wn):

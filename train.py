@@ -238,12 +238,9 @@ def train(train_loader, train_table, model, model_bert, opt, bert_config, tokeni
         # hs_t : tokenized headers. Not used.
 
         # get ground truth
-        # TODO add select num and where connection
         g_sc, g_sa, g_wn, g_wc, g_wo, g_wv = get_g(sql_i)
         # get ground truth where-value index under CoreNLP tokenization scheme. It's done already on trainset.
-        # TODO calc start and end index
-        # g_wvi_corenlp = get_g_wvi_corenlp(t)
-        g_wvi_corenlp = []
+        g_wvi_corenlp = get_g_wvi_corenlp(t)
 
         wemb_n, wemb_h, l_n, l_hpu, l_hs, \
         nlu_tt, t_to_tt_idx, tt_to_t_idx \

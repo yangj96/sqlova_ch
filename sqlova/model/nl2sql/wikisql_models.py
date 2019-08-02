@@ -38,6 +38,8 @@ class Seq2SQL_v1(nn.Module):
         self.n_agg_ops = n_agg_ops
         self.n_cond_conn_ops = n_cond_conn_ops
 
+        # select number
+        self.snp = SNP(iS, hS, lS, dr)
         # select column
         self.scp = SCP(iS, hS, lS, dr)
         # select aggregation
@@ -63,12 +65,14 @@ class Seq2SQL_v1(nn.Module):
         # l_n: token lengths of each question
         # l_hpu: header token lengths
         # l_hs: the number of columns (headers) of the tables.
+        pr_sn = self.snp(wemb_n, l_n, wemb_hpu, l_hpu, l_hs)
+
         s_sc = self.scp(wemb_n, l_n, wemb_hpu, l_hpu, l_hs, show_p_sc=show_p_sc)
 
         if g_sc:
             pr_sc = g_sc
         else:
-            pr_sc = pred_sc(s_sc)
+            pr_sc = pred_sc(pr_sn, s_sc)
 
         # sa
         s_sa = self.sap(wemb_n, l_n, wemb_hpu, l_hpu, l_hs, pr_sc, show_p_sa=show_p_sa)
@@ -76,7 +80,7 @@ class Seq2SQL_v1(nn.Module):
             # it's not necessary though.
             pr_sa = g_sa
         else:
-            pr_sa = pred_sa(s_sa)
+            pr_sa = pred_sa(pr_sn, s_sa)
 
 
         # wn
@@ -298,6 +302,93 @@ class Seq2SQL_v1(nn.Module):
             pr_sql_i.append(pr_sql_i1)
         # s_wv = [B, max_wn, max_nlu_tokens, 2]
         return prob_sca, prob_w, prob_wn_w, pr_sc_best, pr_sa_best, pr_wn_based_on_prob, pr_sql_i
+
+
+class SNP(nn.Module):
+    def __init__(self, iS=300, hS=100, lS=2, dr=0.3):
+        super(SNP, self).__init__()
+        # hS: size of hidden dimension
+        # lS: LSTM encoding layer size
+        # dr: dropout rate
+        # lr: learning rate
+        self.iS = iS
+        self.hS = hS
+        self.lS = lS
+        self.dr = dr
+
+        self.enc_n = nn.LSTM(input_size=iS, hidden_size=int(hS/2),
+                                    num_layers=lS, batch_first=True,
+                                    dropout=dr, bidirectional=True)
+        self.enc_h = nn.LSTM(input_size=iS, hidden_size=int(hS / 2),
+                             num_layers=lS, batch_first=True,
+                             dropout=dr, bidirectional=True)
+        self.sel_num_att = nn.Linear(hS, 1)
+        self.sel_num_col_att = nn.Linear(hS, 1)
+        self.sel_num_out = nn.Sequential(nn.Linear(hS, hS), nn.Tanh(), nn.Linear(hS, 4))
+        self.softmax = nn.Softmax(dim=-1)
+        self.sel_num_col2hid1 = nn.Linear(hS, 2 * hS)
+        self.sel_num_col2hid2 = nn.Linear(hS, 2 * hS)
+
+    def forward(self, wemb_n, l_n, wemb_hpu, l_hpu, l_hs, show_p_sc=False):
+        B = len(l_n)
+        max_x_len = max(l_n)
+
+        # Predict the number of select part
+        # First use column embeddings to calculate the initial hidden unit
+        # Then run the LSTM and predict select number
+
+        # e_num_col, col_num = col_name_encode(col_inp_var, col_name_len,
+        #                                      col_len, self.sel_num_lstm)
+        e_num_col = encode_hpu(self.enc_h, wemb_hpu, l_hpu, l_hs)  # [b, hs, dim]
+
+        num_col_att_val = self.sel_num_col_att(e_num_col).squeeze()
+        for idx, l_hs1 in enumerate(l_hs):
+            if l_hs1 < max(l_hs):
+                num_col_att_val[idx, l_hs1:] = -1000000
+        num_col_att = self.softmax(num_col_att_val)
+        K_num_col = (e_num_col * num_col_att.unsqueeze(2)).sum(1)
+        # sel_num_h1 = self.sel_num_col2hid1(K_num_col).view((B, 4, self.hS//2)).transpose(0,1).contiguous()
+        # sel_num_h2 = self.sel_num_col2hid2(K_num_col).view((B, 4, self.hS//2)).transpose(0,1).contiguous()
+
+        # h_num_enc, _ = self.run_lstm(self.sel_num_lstm, wemb_n, l_n, hidden=(sel_num_h1, sel_num_h2))
+        h_num_enc = encode(self.enc_n, wemb_n,
+                           l_n,return_hidden=False,
+                           hc0=None,
+                           last_only=False)  # [b, n, dim]
+        num_att_val = self.sel_num_att(h_num_enc).squeeze()
+        for idx, num in enumerate(l_n):
+            if num < max_x_len:
+                num_att_val[idx, num:] = -1000000
+        num_att = self.softmax(num_att_val)
+
+        K_sel_num = (h_num_enc * num_att.unsqueeze(2).expand_as(h_num_enc)).sum(1)
+        sel_num_score = self.sel_num_out(K_sel_num)
+        return sel_num_score
+
+    def run_lstm(lstm, inp, inp_len, hidden=None):
+        # Run the LSTM using packed sequence.
+        # This requires to first sort the input according to its length.
+        sort_perm = np.array(sorted(range(len(inp_len)),
+                                    key=lambda k: inp_len[k], reverse=True))
+        sort_inp_len = inp_len[sort_perm]
+        sort_perm_inv = np.argsort(sort_perm)
+        if inp.is_cuda:
+            sort_perm = torch.LongTensor(sort_perm).cuda()
+            sort_perm_inv = torch.LongTensor(sort_perm_inv).cuda()
+
+        lstm_inp = nn.utils.rnn.pack_padded_sequence(inp[sort_perm],
+                                                     sort_inp_len, batch_first=True)
+        if hidden is None:
+            lstm_hidden = None
+        else:
+            lstm_hidden = (hidden[0][:, sort_perm], hidden[1][:, sort_perm])
+
+        sort_ret_s, sort_ret_h = lstm(lstm_inp, lstm_hidden)
+        ret_s = nn.utils.rnn.pad_packed_sequence(
+            sort_ret_s, batch_first=True)[0][sort_perm_inv]
+        ret_h = (sort_ret_h[0][:, sort_perm_inv], sort_ret_h[1][:, sort_perm_inv])
+        return ret_s, ret_h
+
 
 class SCP(nn.Module):
     def __init__(self, iS=300, hS=100, lS=2, dr=0.3):
